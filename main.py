@@ -68,21 +68,7 @@ class DB:
             id += 1
             return id
 
-    def add_search(self):
-        # Prompts user for SPL
-        print("Enter SPL Below:")
-        lines = []
-        while True:
-            user_input = input()
-        
-            if user_input == '':
-                break
-            else:
-                lines.append(user_input + "\n")
-        
-        lines[-1] = lines[-1].strip("\n")
-        search = ''.join(lines)
-
+    def add_search(self, search):
         # Get next avalible ID.
         id = self.get_next_id()
 
@@ -92,6 +78,12 @@ class DB:
         ]
 
         self.cur.executemany("INSERT INTO searches VALUES(?, ?)", data)
+
+        self.commit_db()
+
+    def delete_search(self, id):
+        if isinstance(id, int):
+            res = self.cur.execute(f"DELETE FROM searches WHERE id=?", (id,))
 
         self.commit_db()
 
@@ -112,8 +104,8 @@ class Menu:
         
     def main_menu(self):
         choices = [
-            "View Searches",
-            "Add Search",
+            "Searches",
+            "Database Management",
             "Quit"
         ]
 
@@ -121,20 +113,21 @@ class Menu:
         print(pyfiglet.figlet_format("Main Menu"))
         ans = get_answer(choices)
 
-        if ans == "View Searches":
-            self.view_searches()
-        elif ans == "Add Search":
-            self.database.add_search()
-            self.main_menu()
+        if ans == "Searches":
+            self.search_options()
+        elif ans == "Database Management":
+            self.db_managment()
         elif ans == "Quit":
             self.end()
 
-    ### VIEW SEARCHES ###
-    def view_searches(self):
+    ### SEARCHES ###
+    def search_options(self):
         choices = [
-            "All",
+            "View All Searches",
             "Search by Text",
             "Search by ID",
+            "Add Search",
+            "Delete Search",
             "Go Back",
             "Quit"
         ]
@@ -143,7 +136,7 @@ class Menu:
         print(pyfiglet.figlet_format("Searches"))
         ans = get_answer(choices)
 
-        if ans == "All":
+        if ans == "View All Searches":
             all_searches = self.database.get_searches()
             if all_searches is not None:
                 pretty_print_searches(all_searches)
@@ -170,8 +163,43 @@ class Menu:
                         break
                 except ValueError:
                     print("Not a valid ID")
-            results = self.database.get_search(search_id)
-            print(results)
+
+            result = self.database.get_search(search_id)
+
+            if result is not None:
+                pyperclip.copy(result[1])
+                print(f"\n{result[1]}\n\nSearch copied to clipboard")
+            else:
+                print("\nNo results.")
+
+        elif ans == "Add Search":
+            print("Enter SPL Below (ENTER to Cancel)")
+            lines = []
+            while True:
+                user_input = input()
+            
+                if user_input == '':
+                    break
+                else:
+                    lines.append(user_input + "\n")
+
+            if len(lines) == 0:
+                print("Canceled")
+                _ = input("\nPress Enter to Continue...")
+                self.search_options()
+            
+            lines[-1] = lines[-1].strip("\n")
+            search = ''.join(lines)
+
+            self.database.add_search(search)
+            self.search_options()
+
+        elif ans == "Delete Search":
+            try:
+                search_to_delete = int(input("Enter the ID of the search to delete (ENTER to Cancel)\n--> "))
+                self.database.delete_search(search_to_delete)
+            except ValueError:
+                print("\nNot a valid answer or canceled")
 
         elif ans == "Go Back":
             self.main_menu()
@@ -180,7 +208,37 @@ class Menu:
             self.end()
 
         _ = input("\nPress Enter to Continue...")
-        self.view_searches()
+        self.search_options()
+
+    ### Database Management ###
+    def db_managment(self):
+        
+        choices = [
+            "Export Database",
+            "Reset Database",
+            "Go Back",
+            "Quit"
+        ]
+
+        clear()
+        print(pyfiglet.figlet_format("DB Management"))
+        ans = get_answer(choices)
+
+        if ans == "Export Database":
+            # TODO: Create export functionality
+            print("\nNot implemented")
+        elif ans == "Reset Database":
+            self.database.init_db()
+            print("Database has been reset.")
+
+        elif ans == "Go Back":
+            self.main_menu()
+
+        elif ans == "Quit":
+            self.end()
+
+        _ = input("\nPress Enter to Continue...")
+        self.db_managment()
 
     def end(self):
         self.database.commit_db()
@@ -235,7 +293,7 @@ def copy_search(searches):
             print(f"\nSearch {ans} copied to the clipboard")
 
     except ValueError:
-        print("Nothing Copied")
+        print("\nNothing Copied")
 
 def clear():
     if os.name == "nt":
