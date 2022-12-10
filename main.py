@@ -12,6 +12,8 @@ TODO
 import sqlite3
 import os
 import json
+from textwrap import fill
+
 import pyperclip
 import pyfiglet
 from prettytable import PrettyTable
@@ -384,8 +386,19 @@ def pretty_print_searches(searches):
         else:
             tags_string = tags.strip("[]")
             tags_string = tags_string.replace("\"", "")
+        
+        # Word wrap SPL
+        spl = searches[search]["spl"]
+        spl_split = [line + "\n" for line in spl.split('\n') if line]
 
-        table.add_row([search, tags_string, searches[search]["spl"] + "\n", searches[search]["notes"]])
+        spl_list = list()
+        for line in spl_split:
+            filled = fill(line, subsequent_indent="    ")
+            spl_list.append(filled)
+        
+        spl = "\n".join(spl_list)
+
+        table.add_row([search, tags_string, spl + "\n", searches[search]["notes"]])
 
     print(table.get_string(sortby="ID"))
 
