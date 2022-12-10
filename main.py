@@ -123,6 +123,18 @@ class DB:
             self.cur.execute("UPDATE searches SET tags=? WHERE id=?", (new_tags, id))
             self.commit_db()
 
+    ### Update SPL ###
+    def update_spl(self, id, new_spl):
+        if isinstance(id, int):
+            self.cur.execute("UPDATE searches SET spl=? WHERE id=?", (new_spl, id))
+            self.commit_db()
+
+    ### Update Notes ###
+    def update_note(self, id, new_note):
+        if isinstance(id, int):
+            self.cur.execute("UPDATE searches SET notes=? WHERE id=?", (new_note, id))
+            self.commit_db()
+
     def commit_db(self):
         self.con.commit()
 
@@ -239,27 +251,16 @@ class Menu:
         elif ans == "Add Search":
             # Get SPL
             print("Enter SPL Below (ENTER to Cancel)")
+            spl = multiline_input()
 
-            user_input = multiline_input()
-
-            if len(user_input) == 0:
+            if spl == 0:
                 print("Canceled")
                 _ = input("\nPress Enter to Continue...")
                 self.search_menu()
 
-            user_input[-1] = user_input[-1].strip("\n")
-            spl = "".join(user_input)
-            
             # Get Notes
             print("Enter Notes Below (ENTER for None)")
-
-            user_input = multiline_input()
-
-            if len(user_input) != 0:
-                user_input[-1] = user_input[-1].strip("\n")
-                notes = "".join(user_input)
-            else:
-                notes = ""
+            notes = multiline_input()
 
             # Get Tags
             tags = tags_input()
@@ -333,13 +334,23 @@ class Menu:
 
         ## Edit SPL
         elif ans == "Edit SPL":
-            print("Not yet implemented")
-            pass
+            print("Enter new SPL Below (ENTER for None)")
+            new_spl = multiline_input()
+            self.database.update_spl(search_id, new_spl)
+            updated_search = self.database.get_search(search_id)
+
+            print("\nUpdated Search")
+            pretty_print_searches(updated_search)
 
         ## Edit Notes
         elif ans == "Edit Notes":
-            print("Not yet implemented")
-            pass
+            print("Enter new Notes Below (ENTER for None)")
+            new_note = multiline_input()
+            self.database.update_note(search_id, new_note)
+            updated_search = self.database.get_search(search_id)
+
+            print("\nUpdated Search")
+            pretty_print_searches(updated_search)
         
         ## Delete Search
         elif ans == "Delete":
@@ -441,7 +452,7 @@ def pretty_print_searches(searches):
         table.add_row([search, tags_string, spl + "\n", searches[search]["notes"]])
 
     # Print out the table sorted by ID
-    print(table.get_string(sortby="ID"))
+    print(table.get_string(sortby="Tags"))
 
 ### Get Answer ###
 def get_answer(choices):
@@ -489,6 +500,12 @@ def multiline_input():
             break
         else:
             lines.append(user_input + "\n")
+
+    if len(lines) != 0:
+        lines[-1] = lines[-1].strip("\n")
+        lines = "".join(lines)
+    else:
+        lines = ""
 
     return lines
 
