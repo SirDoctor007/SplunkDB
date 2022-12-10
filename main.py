@@ -4,8 +4,9 @@ Email: dillon.obrien@dkolabs.com
 Requirments: prettytable, pyperclip, pyfiglet
 
 TODO
-- Add notes to seaches
-- Add function to remove/add tags to search
+- Add function to edit SPL and Notes
+- Limit table width
+- Word wrap tags, maybe two per line
 '''
 
 import sqlite3
@@ -34,6 +35,7 @@ class DB:
         if res is None:
             self.init_db()
     
+    ### Init Database ###
     def init_db(self):
         self.cur.execute("DROP TABLE IF EXISTS searches")
         self.cur.execute("CREATE TABLE searches(id, tags, spl, notes)")
@@ -68,7 +70,7 @@ class DB:
     def get_search(self, id):
         if isinstance(id, int):
             res = self.cur.execute(f"SELECT * FROM searches WHERE id=?", (id,)).fetchone()
-            return res
+            return {res[0]: {"tags": res[1], "spl": res[2], "notes": res[3]}}
         else:
             return None
 
@@ -104,11 +106,17 @@ class DB:
         self.cur.execute("INSERT INTO searches VALUES(?, ?, ?, ?)", data)
         self.commit_db()
 
+    ### Delete Search ###
     def delete_search(self, id):
         if isinstance(id, int):
-            self.cur.execute(f"DELETE FROM searches WHERE id=?", (id,))
-
-        self.commit_db()
+            self.cur.execute("DELETE FROM searches WHERE id=?", (id,))
+            self.commit_db()
+    
+    ### Update Tags ###
+    def update_tags(self, id, new_tags):
+        if isinstance(id, int):
+            self.cur.execute("UPDATE searches SET tags=? WHERE id=?", (new_tags, id))
+            self.commit_db()
 
     def commit_db(self):
         self.con.commit()
@@ -151,6 +159,7 @@ class Menu:
             "Search by Tag",
             "Search by ID",
             "Add Search",
+            "Edit Search",
             "Delete Search",
             "Go Back",
             "Quit"
@@ -165,6 +174,7 @@ class Menu:
             all_searches = self.database.get_searches()
 
             if all_searches is not None:
+                clear()
                 pretty_print_searches(all_searches)
                 copy_search(all_searches)
             else:
@@ -176,6 +186,7 @@ class Menu:
             if results is None or len(results) == 0:
                 print("\nNo results")
             else:
+                clear()
                 pretty_print_searches(results)
                 copy_search(results)
 
@@ -191,6 +202,7 @@ class Menu:
             if results is None:
                 print("\nNo results")
             else:
+                clear()
                 pretty_print_searches(results)
                 copy_search(results)
         
@@ -209,8 +221,8 @@ class Menu:
             result = self.database.get_search(search_id)
 
             if result is not None:
-                pyperclip.copy(result[2])
-                print(f"\n{result[2]}\n\nSearch copied to clipboard")
+                pyperclip.copy(result[search_id]["spl"])
+                print(f"\n{result[search_id]['spl']}\n\nSearch copied to clipboard")
             else:
                 print("\nNo results.")
 
@@ -241,15 +253,55 @@ class Menu:
                 notes = ""
 
             # Get Tags
-            tags_unformatted = input("Enter tags, comma seperated (ENTER for none)\n--> ")
-            tags_unformatted = tags_unformatted.split(",")
-            tag_list = list()
-            for tag in tags_unformatted:
-                tag_list.append(tag.strip())
-            
-            tags = json.dumps(tag_list)
+            tags = tags_input()
 
             self.database.add_search(tags, spl, notes)
+            self.search_options()
+
+        ### Edit Search ###
+        elif ans == "Edit Search":
+
+            try:
+                search_id = int(input("Enter the ID of the search to edit (ENTER to Cancel): "))
+                search = self.database.get_search(search_id)
+
+                if search is None:
+                    raise ValueError    
+        
+            except ValueError:
+                print("\nNot a valid answer or canceled")
+                _ = input("\nPress Enter to Continue...")
+                self.search_options()
+
+            choices = [
+                "Tags",
+                "SPL",
+                "Notes"
+            ]
+
+            clear()
+            print(pyfiglet.figlet_format("Search Edit"))
+
+            pretty_print_searches(search)
+            print("")
+
+            ans = get_answer(choices)
+
+            if ans == "Tags":
+                print("")
+                new_tags = tags_input()
+                self.database.update_tags(search_id, new_tags)
+                updated_search = self.database.get_search(search_id)
+                print("\nUpdated Search\n")
+                pretty_print_searches(updated_search)
+            elif ans == "SPL":
+                # TODO Edit SPL Function
+                pass
+            elif ans == "Notes":
+                # TODO Edit Notes Function
+                pass
+
+            _ = input("\nPress Enter to Continue...")
             self.search_options()
 
         ### Menu - Delete Search ###
@@ -320,7 +372,6 @@ class Menu:
 # TODO Add a word wraping function to limit table width
 ### Print Table ###
 def pretty_print_searches(searches):
-    clear()
     table = PrettyTable()
     table.align = "l"
     table.field_names = ["ID", "Tags", "SPL", "Notes"]
@@ -376,6 +427,16 @@ def get_answer(choices):
 
     return ans
 
+def tags_input():
+    tags_unformatted = input("Enter tags, comma seperated (ENTER for none)\n--> ")
+    tags_unformatted = tags_unformatted.split(",")
+    tag_list = list()
+    for tag in tags_unformatted:
+        tag_list.append(tag.strip())
+    
+    return json.dumps(tag_list)
+
+### Multiline Input ###
 def multiline_input():
     lines = []
 
@@ -388,6 +449,7 @@ def multiline_input():
 
     return lines
 
+### Clear ###
 def clear():
     if os.name == "nt":
         _ = os.system("cls")
