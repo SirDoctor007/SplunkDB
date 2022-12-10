@@ -11,9 +11,9 @@ TODO
 import sqlite3
 import os
 import json
-from prettytable import PrettyTable
 import pyperclip
 import pyfiglet
+from prettytable import PrettyTable
 
 
 ######################################
@@ -36,7 +36,7 @@ class DB:
     
     def init_db(self):
         self.cur.execute("DROP TABLE IF EXISTS searches")
-        self.cur.execute("CREATE TABLE searches(id, spl, tags)")
+        self.cur.execute("CREATE TABLE searches(id, tags, spl, notes)")
         self.commit_db()
 
     ### Search SPL ###
@@ -46,14 +46,14 @@ class DB:
         if len(res) == 0:
             return None
         else:
-            return {search[0]: {"spl": search[1], "tags": search[2]} for search in res}
+            return {search[0]: {"tags": search[1], "spl": search[2], "notes": search[3]} for search in res}
 
     ### Search Tags ###
     def search_tag(self, tag):
         tag = f'%"{tag}"%'
         res = self.cur.execute(f"SELECT * FROM searches WHERE tags LIKE ?", (tag,)).fetchall()
         
-        return {search[0]: {"spl": search[1], "tags": search[2]} for search in res}
+        return {search[0]: {"tags": search[1], "spl": search[2], "notes": search[3]} for search in res}
 
     ### Get Searches ###
     def get_searches(self):
@@ -62,7 +62,7 @@ class DB:
         if len(res) == 0:
             return None
         else:
-            return {search[0]: {"spl": search[1], "tags": search[2]} for search in res}
+            return {search[0]: {"tags": search[1], "spl": search[2], "notes": search[3]} for search in res}
 
     ### Get Search ###
     def get_search(self, id):
@@ -96,19 +96,17 @@ class DB:
         return list(dict.fromkeys(tags))
 
     ### Add Search ###
-    def add_search(self, search, tags):
+    def add_search(self, tags, spl, notes):
         id = self.get_next_id()
 
-        data = [
-            (id, search, tags)
-        ]
+        data = (id, tags, spl, notes)
 
-        self.cur.executemany("INSERT INTO searches VALUES(?, ?, ?)", data)
+        self.cur.execute("INSERT INTO searches VALUES(?, ?, ?, ?)", data)
         self.commit_db()
 
     def delete_search(self, id):
         if isinstance(id, int):
-            res = self.cur.execute(f"DELETE FROM searches WHERE id=?", (id,))
+            self.cur.execute(f"DELETE FROM searches WHERE id=?", (id,))
 
         self.commit_db()
 
@@ -211,31 +209,38 @@ class Menu:
             result = self.database.get_search(search_id)
 
             if result is not None:
-                pyperclip.copy(result[1])
-                print(f"\n{result[1]}\n\nSearch copied to clipboard")
+                pyperclip.copy(result[2])
+                print(f"\n{result[2]}\n\nSearch copied to clipboard")
             else:
                 print("\nNo results.")
 
         ### Menu - Add Search ###
         elif ans == "Add Search":
+            # Get SPL
             print("Enter SPL Below (ENTER to Cancel)")
-            lines = []
-            while True:
-                user_input = input()
-            
-                if user_input == "":
-                    break
-                else:
-                    lines.append(user_input + "\n")
 
-            if len(lines) == 0:
+            user_input = multiline_input()
+
+            if len(user_input) == 0:
                 print("Canceled")
                 _ = input("\nPress Enter to Continue...")
                 self.search_options()
 
-            lines[-1] = lines[-1].strip("\n")
-            search = ''.join(lines)
+            user_input[-1] = user_input[-1].strip("\n")
+            spl = ''.join(user_input)
             
+            # Get Notes
+            print("Enter Notes Below (ENTER for None)")
+
+            user_input = multiline_input()
+
+            if len(user_input) != 0:
+                user_input[-1] = user_input[-1].strip("\n")
+                notes = "".join(user_input)
+            else:
+                notes = ""
+
+            # Get Tags
             tags_unformatted = input("Enter tags, comma seperated (ENTER for none)\n--> ")
             tags_unformatted = tags_unformatted.split(",")
             tag_list = list()
@@ -243,8 +248,8 @@ class Menu:
                 tag_list.append(tag.strip())
             
             tags = json.dumps(tag_list)
-            
-            self.database.add_search(search, tags)
+
+            self.database.add_search(tags, spl, notes)
             self.search_options()
 
         ### Menu - Delete Search ###
@@ -313,11 +318,12 @@ class Menu:
 ######################################
 
 # TODO Add a word wraping function to limit table width
+### Print Table ###
 def pretty_print_searches(searches):
     clear()
     table = PrettyTable()
     table.align = "l"
-    table.field_names = ["ID", "SPL", "Tags"]
+    table.field_names = ["ID", "Tags", "SPL", "Notes"]
 
     for search in searches:
         tags = searches[search]["tags"]
@@ -328,10 +334,24 @@ def pretty_print_searches(searches):
             tags_string = tags.strip("[]")
             tags_string = tags_string.replace("\"", "")
 
-        table.add_row([search, searches[search]["spl"] + "\n", tags_string])
+        table.add_row([search, tags_string, searches[search]["spl"] + "\n", searches[search]["notes"]])
 
     print(table.get_string(sortby="ID"))
 
+### Copy Search ###
+def copy_search(searches):
+    try:
+        ans = int(input("Enter ID of Search to Copy or Press ENTER to Skip\n--> "))
+        if ans not in searches.keys():
+            raise ValueError
+        else:
+            pyperclip.copy(searches[ans]["spl"])
+            print(f"\nSearch {ans} copied to the clipboard")
+
+    except ValueError:
+        print("\nNothing Copied")
+
+### Get Answer ###
 def get_answer(choices):
     choices_tuples = list()
     ans = None
@@ -356,17 +376,17 @@ def get_answer(choices):
 
     return ans
 
-def copy_search(searches):
-    try:
-        ans = int(input("Enter ID of Search to Copy or Press ENTER to Skip\n--> "))
-        if ans not in searches.keys():
-            raise ValueError
-        else:
-            pyperclip.copy(searches[ans]["spl"])
-            print(f"\nSearch {ans} copied to the clipboard")
+def multiline_input():
+    lines = []
 
-    except ValueError:
-        print("\nNothing Copied")
+    while True:
+        user_input = input()
+        if user_input == "":
+            break
+        else:
+            lines.append(user_input + "\n")
+
+    return lines
 
 def clear():
     if os.name == "nt":
