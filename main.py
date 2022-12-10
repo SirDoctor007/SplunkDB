@@ -5,8 +5,10 @@ Requirments: prettytable, pyperclip, pyfiglet
 
 TODO
 - Add function to edit SPL and Notes
-- Limit table width
+- Limit table width (being completed by implementing word wrapping)
 - Word wrap tags, maybe two per line
+- Word wrap notes
+- Allow user to select max line lengths for word wrapping
 '''
 
 import sqlite3
@@ -72,9 +74,10 @@ class DB:
     def get_search(self, id):
         if isinstance(id, int):
             res = self.cur.execute(f"SELECT * FROM searches WHERE id=?", (id,)).fetchone()
-            return {res[0]: {"tags": res[1], "spl": res[2], "notes": res[3]}}
-        else:
-            return None
+            if res is not None:
+                return {res[0]: {"tags": res[1], "spl": res[2], "notes": res[3]}}
+        
+        return None
 
     ### Get Next ID ###
     def get_next_id(self):
@@ -135,6 +138,7 @@ class Menu:
     def __init__(self):
         self.database = DB()
         
+    ### Main Menu ###
     def main_menu(self):
         choices = [
             "Searches",
@@ -146,23 +150,26 @@ class Menu:
         print(pyfiglet.figlet_format("Main Menu"))
         ans = get_answer(choices)
 
+        ## Searches
         if ans == "Searches":
-            self.search_options()
+            self.search_menu()
+        
+        ## Database Management
         elif ans == "Database Management":
-            self.db_managment()
+            self.db_menu()
+        
+        ## Quit
         elif ans == "Quit":
             self.end()
 
-    ### SEARCHES ###
-    def search_options(self):
+    ### SEARCH Menu ###
+    def search_menu(self):
         choices = [
             "View All Searches",
             "Search by Text",
             "Search by Tag",
             "Search by ID",
             "Add Search",
-            "Edit Search",
-            "Delete Search",
             "Go Back",
             "Quit"
         ]
@@ -171,28 +178,28 @@ class Menu:
         print(pyfiglet.figlet_format("Searches"))
         ans = get_answer(choices)
 
-        ### View All Searches ###
+        ## View All Searches
         if ans == "View All Searches":
             all_searches = self.database.get_searches()
 
             if all_searches is not None:
                 clear()
-                pretty_print_searches(all_searches)
-                copy_search(all_searches)
+                self.search_options(all_searches)
             else:
                 print("\nNo results")
 
+        ## Search by Text
         elif ans == "Search by Text":
-            search_term = input("Enter the text to search for: ")
+            search_term = input("\nEnter the text to search for: ")
             results = self.database.search_spl(search_term)
+
             if results is None or len(results) == 0:
                 print("\nNo results")
             else:
                 clear()
-                pretty_print_searches(results)
-                copy_search(results)
+                self.search_options(results)
 
-        ### Menu - Search by Tag ###
+        ## Search by Tag
         elif ans == "Search by Tag":
             tags = self.database.get_tags()
             clear()
@@ -205,10 +212,9 @@ class Menu:
                 print("\nNo results")
             else:
                 clear()
-                pretty_print_searches(results)
-                copy_search(results)
+                self.search_options(results)
         
-        ### Menu - Search by ID ###
+        ## Search by ID
         elif ans == "Search by ID":
             while True:
                 try:
@@ -218,17 +224,18 @@ class Menu:
                     else:
                         break
                 except ValueError:
-                    print("Not a valid ID")
+                    print("\nNot a valid ID")
+                    _ = input("\nPress Enter to Continue...") 
+                    self.search_menu()
 
             result = self.database.get_search(search_id)
 
             if result is not None:
-                pyperclip.copy(result[search_id]["spl"])
-                print(f"\n{result[search_id]['spl']}\n\nSearch copied to clipboard")
+                self.search_options(result)
             else:
                 print("\nNo results.")
 
-        ### Menu - Add Search ###
+        ## Add Search
         elif ans == "Add Search":
             # Get SPL
             print("Enter SPL Below (ENTER to Cancel)")
@@ -238,10 +245,10 @@ class Menu:
             if len(user_input) == 0:
                 print("Canceled")
                 _ = input("\nPress Enter to Continue...")
-                self.search_options()
+                self.search_menu()
 
             user_input[-1] = user_input[-1].strip("\n")
-            spl = ''.join(user_input)
+            spl = "".join(user_input)
             
             # Get Notes
             print("Enter Notes Below (ENTER for None)")
@@ -257,76 +264,101 @@ class Menu:
             # Get Tags
             tags = tags_input()
 
+            # Add search
             self.database.add_search(tags, spl, notes)
-            self.search_options()
+            print("\nSearch Added.")
 
-        ### Edit Search ###
-        elif ans == "Edit Search":
-
-            try:
-                search_id = int(input("Enter the ID of the search to edit (ENTER to Cancel): "))
-                search = self.database.get_search(search_id)
-
-                if search is None:
-                    raise ValueError    
-        
-            except ValueError:
-                print("\nNot a valid answer or canceled")
-                _ = input("\nPress Enter to Continue...")
-                self.search_options()
-
-            choices = [
-                "Tags",
-                "SPL",
-                "Notes"
-            ]
-
-            clear()
-            print(pyfiglet.figlet_format("Search Edit"))
-
-            pretty_print_searches(search)
-            print("")
-
-            ans = get_answer(choices)
-
-            if ans == "Tags":
-                print("")
-                new_tags = tags_input()
-                self.database.update_tags(search_id, new_tags)
-                updated_search = self.database.get_search(search_id)
-                print("\nUpdated Search\n")
-                pretty_print_searches(updated_search)
-            elif ans == "SPL":
-                # TODO Edit SPL Function
-                pass
-            elif ans == "Notes":
-                # TODO Edit Notes Function
-                pass
-
-            _ = input("\nPress Enter to Continue...")
-            self.search_options()
-
-        ### Menu - Delete Search ###
-        elif ans == "Delete Search":
-            try:
-                search_to_delete = int(input("Enter the ID of the search to delete (ENTER to Cancel)\n--> "))
-                self.database.delete_search(search_to_delete)
-            except ValueError:
-                print("\nNot a valid answer or canceled")
-
-        ### Go Back ###
+        ## Go Back
         elif ans == "Go Back":
             self.main_menu()
 
-        ### Quit ###
+        ## Quit
         elif ans == "Quit":
             self.end()
 
         _ = input("\nPress Enter to Continue...")
-        self.search_options()
+        self.search_menu()
+
+    ### Search Options ###
+    def search_options(self, searches):
+
+        # Narrow down options to one search
+        if len(searches) > 1:
+            pretty_print_searches(searches)
+            try:
+                search_id = int(input("Search ID or ENTER for None: "))
+                if search_id not in searches.keys():
+                    raise ValueError
+                else: 
+                    search = {search_id: searches[search_id]}
+            except ValueError:
+                print("\nNo results")
+                _ = input("\nPress Enter to Continue...")
+                self.search_menu()
+        else:
+            search = searches
+        
+        choices =[
+            "Copy",
+            "Edit Tags",
+            "Edit SPL",
+            "Edit Notes",
+            "Delete",
+            "Go Back",
+            "Quit"
+        ]
+
+        clear()
+        print(pyfiglet.figlet_format("Search Options"))
+        pretty_print_searches(search)
+        search_id = list(search.keys()).pop()
+        print("")
+        ans = get_answer(choices)
+
+        ## Copy
+        if ans == "Copy":
+            pyperclip.copy(searches[search_id]["spl"])
+            print(f"\nSearch {search_id} copied to the clipboard.")
+
+        ## Edit Tags
+        elif ans == "Edit Tags":
+            print("")
+
+            new_tags = tags_input()
+            self.database.update_tags(search_id, new_tags)
+            updated_search = self.database.get_search(search_id)
+
+            print("\nUpdated Search\n")
+            pretty_print_searches(updated_search)
+
+        ## Edit SPL
+        elif ans == "Edit SPL":
+            print("Not yet implemented")
+            pass
+
+        ## Edit Notes
+        elif ans == "Edit Notes":
+            print("Not yet implemented")
+            pass
+        
+        ## Delete Search
+        elif ans == "Delete":
+            self.database.delete_search(search_id)
+            print(f"\nSearch {search_id} deleted.")
+
+        ## Go Back
+        elif ans == "Go Back":
+            self.search_menu()
+
+        ## Quit
+        elif ans == "Quit":
+            self.end()
+
+        _ = input("\nPress Enter to Continue...")
+        self.search_menu()
 
     ### Database Management ###
-    def db_managment(self):
+    def db_menu(self):
         
         choices = [
             "Re-Index Database",
@@ -340,27 +372,33 @@ class Menu:
         print(pyfiglet.figlet_format("DB Management"))
         ans = get_answer(choices)
 
+        ## Re-Index Database
         if ans == "Re-Index Database":
             # TODO: Create re-index functionality
             print("\nNot yet implemented")
 
+        ## Export Database
         elif ans == "Export Database":
             # TODO: Create export functionality
             print("\nNot yet implemented")
 
+        ## Reset Database
         elif ans == "Reset Database":
             self.database.init_db()
             print("\nDatabase has been reset.")
 
+        ## Go Back
         elif ans == "Go Back":
             self.main_menu()
 
+        ## Quit
         elif ans == "Quit":
             self.end()
 
         _ = input("\nPress Enter to Continue...")
-        self.db_managment()
+        self.db_menu()
 
+    ### End ###
     def end(self):
         self.database.commit_db()
         self.database.close_db()
@@ -379,6 +417,7 @@ def pretty_print_searches(searches):
     table.field_names = ["ID", "Tags", "SPL", "Notes"]
 
     for search in searches:
+        # Format tags to look nice
         tags = searches[search]["tags"]
         
         if tags == "[]":
@@ -398,22 +437,11 @@ def pretty_print_searches(searches):
         
         spl = "\n".join(spl_list)
 
+        # Add search to table
         table.add_row([search, tags_string, spl + "\n", searches[search]["notes"]])
 
+    # Print out the table sorted by ID
     print(table.get_string(sortby="ID"))
-
-### Copy Search ###
-def copy_search(searches):
-    try:
-        ans = int(input("Enter ID of Search to Copy or Press ENTER to Skip\n--> "))
-        if ans not in searches.keys():
-            raise ValueError
-        else:
-            pyperclip.copy(searches[ans]["spl"])
-            print(f"\nSearch {ans} copied to the clipboard")
-
-    except ValueError:
-        print("\nNothing Copied")
 
 ### Get Answer ###
 def get_answer(choices):
@@ -422,7 +450,7 @@ def get_answer(choices):
 
     while True:
         for pos, choice in enumerate(choices, 1):
-            print(f'{pos}) {choice}')
+            print(f"{pos}) {choice}")
             choices_tuples.append((pos, choice))
 
         try:
@@ -440,10 +468,12 @@ def get_answer(choices):
 
     return ans
 
+### Tags Input ###
 def tags_input():
     tags_unformatted = input("Enter tags, comma seperated (ENTER for none)\n--> ")
     tags_unformatted = tags_unformatted.split(",")
     tag_list = list()
+
     for tag in tags_unformatted:
         tag_list.append(tag.strip())
     
