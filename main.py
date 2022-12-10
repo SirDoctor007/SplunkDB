@@ -2,13 +2,6 @@
 Author: Dillon O'Brien
 Email: dillon.obrien@dkolabs.com
 Requirments: prettytable, pyperclip, pyfiglet
-
-TODO
-- Add function to edit SPL and Notes
-- Limit table width (being completed by implementing word wrapping)
-- Word wrap tags, maybe two per line
-- Word wrap notes
-- Allow user to select max line lengths for word wrapping
 '''
 
 import sqlite3
