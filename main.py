@@ -2,10 +2,15 @@
 Author: Dillon O'Brien
 Email: dillon.obrien@dkolabs.com
 Requirments: prettytable, pyperclip, pyfiglet
+
+TODO
+- Add notes to seaches
+- Add function to remove/add tags to search
 '''
 
 import sqlite3
 import os
+import json
 from prettytable import PrettyTable
 import pyperclip
 import pyfiglet
@@ -31,26 +36,35 @@ class DB:
     
     def init_db(self):
         self.cur.execute("DROP TABLE IF EXISTS searches")
-        self.cur.execute("CREATE TABLE searches(id, spl)")
+        self.cur.execute("CREATE TABLE searches(id, spl, tags)")
         self.commit_db()
 
-    def search(self, search_term):
-
+    ### Search SPL ###
+    def search_spl(self, search_term):
         res = self.cur.execute(f"SELECT * FROM searches WHERE spl LIKE ?", ("%" + search_term + "%",)).fetchall()
 
         if len(res) == 0:
             return None
         else:
-            return dict(res)
+            return {search[0]: {"spl": search[1], "tags": search[2]} for search in res}
 
+    ### Search Tags ###
+    def search_tag(self, tag):
+        tag = f'%"{tag}"%'
+        res = self.cur.execute(f"SELECT * FROM searches WHERE tags LIKE ?", (tag,)).fetchall()
+        
+        return {search[0]: {"spl": search[1], "tags": search[2]} for search in res}
+
+    ### Get Searches ###
     def get_searches(self):
         res = self.cur.execute("SELECT * FROM searches").fetchall()
 
         if len(res) == 0:
             return None
         else:
-            return dict(res)
+            return {search[0]: {"spl": search[1], "tags": search[2]} for search in res}
 
+    ### Get Search ###
     def get_search(self, id):
         if isinstance(id, int):
             res = self.cur.execute(f"SELECT * FROM searches WHERE id=?", (id,)).fetchone()
@@ -58,6 +72,7 @@ class DB:
         else:
             return None
 
+    ### Get Next ID ###
     def get_next_id(self):
         res = self.cur.execute("SELECT MAX(id) FROM searches")
         id = res.fetchone()[0]
@@ -67,18 +82,28 @@ class DB:
         else:
             id += 1
             return id
+    
+    ### Get Tags ###
+    def get_tags(self):
+        res = self.cur.execute("SELECT DISTINCT(tags) FROM searches").fetchall()
+        tags = list()
+        
+        for item in res:
+            if item[0] != '[""]':
+                temp = json.loads(item[0])
+                tags += temp
 
-    def add_search(self, search):
-        # Get next avalible ID.
+        return list(dict.fromkeys(tags))
+
+    ### Add Search ###
+    def add_search(self, search, tags):
         id = self.get_next_id()
 
-        # Add search to DB
         data = [
-            (id, search)
+            (id, search, tags)
         ]
 
-        self.cur.executemany("INSERT INTO searches VALUES(?, ?)", data)
-
+        self.cur.executemany("INSERT INTO searches VALUES(?, ?, ?)", data)
         self.commit_db()
 
     def delete_search(self, id):
@@ -125,6 +150,7 @@ class Menu:
         choices = [
             "View All Searches",
             "Search by Text",
+            "Search by Tag",
             "Search by ID",
             "Add Search",
             "Delete Search",
@@ -136,8 +162,10 @@ class Menu:
         print(pyfiglet.figlet_format("Searches"))
         ans = get_answer(choices)
 
+        ### View All Searches ###
         if ans == "View All Searches":
             all_searches = self.database.get_searches()
+
             if all_searches is not None:
                 pretty_print_searches(all_searches)
                 copy_search(all_searches)
@@ -146,13 +174,29 @@ class Menu:
 
         elif ans == "Search by Text":
             search_term = input("Enter the text to search for: ")
-            results = self.database.search(search_term)
+            results = self.database.search_spl(search_term)
             if results is None or len(results) == 0:
                 print("\nNo results")
             else:
                 pretty_print_searches(results)
                 copy_search(results)
 
+        ### Menu - Search by Tag ###
+        elif ans == "Search by Tag":
+            tags = self.database.get_tags()
+            clear()
+            print(pyfiglet.figlet_format("Select Tag"))
+            tag = get_answer(tags)
+
+            results = self.database.search_tag(tag)
+
+            if results is None:
+                print("\nNo results")
+            else:
+                pretty_print_searches(results)
+                copy_search(results)
+        
+        ### Menu - Search by ID ###
         elif ans == "Search by ID":
             while True:
                 try:
@@ -172,13 +216,14 @@ class Menu:
             else:
                 print("\nNo results.")
 
+        ### Menu - Add Search ###
         elif ans == "Add Search":
             print("Enter SPL Below (ENTER to Cancel)")
             lines = []
             while True:
                 user_input = input()
             
-                if user_input == '':
+                if user_input == "":
                     break
                 else:
                     lines.append(user_input + "\n")
@@ -187,13 +232,22 @@ class Menu:
                 print("Canceled")
                 _ = input("\nPress Enter to Continue...")
                 self.search_options()
-            
+
             lines[-1] = lines[-1].strip("\n")
             search = ''.join(lines)
-
-            self.database.add_search(search)
+            
+            tags_unformatted = input("Enter tags, comma seperated (ENTER for none)\n--> ")
+            tags_unformatted = tags_unformatted.split(",")
+            tag_list = list()
+            for tag in tags_unformatted:
+                tag_list.append(tag.strip())
+            
+            tags = json.dumps(tag_list)
+            
+            self.database.add_search(search, tags)
             self.search_options()
 
+        ### Menu - Delete Search ###
         elif ans == "Delete Search":
             try:
                 search_to_delete = int(input("Enter the ID of the search to delete (ENTER to Cancel)\n--> "))
@@ -201,9 +255,11 @@ class Menu:
             except ValueError:
                 print("\nNot a valid answer or canceled")
 
+        ### Go Back ###
         elif ans == "Go Back":
             self.main_menu()
 
+        ### Quit ###
         elif ans == "Quit":
             self.end()
 
@@ -214,6 +270,7 @@ class Menu:
     def db_managment(self):
         
         choices = [
+            "Re-Index Database",
             "Export Database",
             "Reset Database",
             "Go Back",
@@ -224,12 +281,17 @@ class Menu:
         print(pyfiglet.figlet_format("DB Management"))
         ans = get_answer(choices)
 
-        if ans == "Export Database":
+        if ans == "Re-Index Database":
+            # TODO: Create re-index functionality
+            print("\nNot yet implemented")
+
+        elif ans == "Export Database":
             # TODO: Create export functionality
-            print("\nNot implemented")
+            print("\nNot yet implemented")
+
         elif ans == "Reset Database":
             self.database.init_db()
-            print("Database has been reset.")
+            print("\nDatabase has been reset.")
 
         elif ans == "Go Back":
             self.main_menu()
@@ -250,14 +312,25 @@ class Menu:
 ########## Helper Functions ##########
 ######################################
 
+# TODO Add a word wraping function to limit table width
 def pretty_print_searches(searches):
     clear()
     table = PrettyTable()
     table.align = "l"
-    table.field_names = ["ID", "SPL"]
+    table.field_names = ["ID", "SPL", "Tags"]
+
     for search in searches:
-        table.add_row([search, searches[search] + "\n"])
-    print(table)
+        tags = searches[search]["tags"]
+        
+        if tags == "[]":
+            tags_string = ""
+        else:
+            tags_string = tags.strip("[]")
+            tags_string = tags_string.replace("\"", "")
+
+        table.add_row([search, searches[search]["spl"] + "\n", tags_string])
+
+    print(table.get_string(sortby="ID"))
 
 def get_answer(choices):
     choices_tuples = list()
@@ -289,7 +362,7 @@ def copy_search(searches):
         if ans not in searches.keys():
             raise ValueError
         else:
-            pyperclip.copy(searches[ans])
+            pyperclip.copy(searches[ans]["spl"])
             print(f"\nSearch {ans} copied to the clipboard")
 
     except ValueError:
