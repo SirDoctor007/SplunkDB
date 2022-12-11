@@ -103,6 +103,14 @@ class DB:
 
         self.cur.execute("INSERT INTO searches VALUES(?, ?, ?, ?)", data)
         self.commit_db()
+    
+    ### Add Searches ###
+    def add_searches(self, searches):
+        for search in searches:
+            data = (search, searches[search]["tags"], searches[search]["spl"], searches[search]["notes"])
+            self.cur.execute("INSERT INTO searches VALUES(?, ?, ?, ?)", data)
+        
+        self.commit_db()
 
     ### Delete Search ###
     def delete_search(self, id):
@@ -142,8 +150,10 @@ class DB:
 class Menu:
     def __init__(self):
         self.database = DB()
-        
+
+    #################   
     ### Main Menu ###
+    #################   
     def main_menu(self):
         choices = [
             "Searches",
@@ -167,7 +177,9 @@ class Menu:
         elif ans == "Quit":
             self.end()
 
-    ### SEARCH Menu ###
+    ###################
+    ### Search Menu ###
+    ###################
     def search_menu(self):
         choices = [
             "View All Searches",
@@ -273,7 +285,9 @@ class Menu:
         _ = input("\nPress Enter to Continue...")
         self.search_menu()
 
+    ######################
     ### Search Options ###
+    ######################
     def search_options(self, searches):
 
         # Narrow down options to one search
@@ -361,7 +375,9 @@ class Menu:
         _ = input("\nPress Enter to Continue...")
         self.search_menu()
 
+    ###########################
     ### Database Management ###
+    ###########################
     def db_menu(self):
         
         choices = [
@@ -378,8 +394,23 @@ class Menu:
 
         ## Re-Index Database
         if ans == "Re-Index Database":
-            # TODO: Create re-index functionality
-            print("\nNot yet implemented")
+            old_searches = self.database.get_searches()
+            new_searches = dict()
+            index = dict()
+
+            for id in old_searches:
+                index[id] = old_searches[id]["tags"] + f" - {str(id)}"
+            
+            tags_sorted = list(index.values())
+            tags_sorted.sort()
+
+            for pos, tag in enumerate(tags_sorted, 1):
+                for key, value in index.items():
+                    if tag == value:
+                        new_searches[pos] = old_searches[key]
+
+            self.database.add_searches(new_searches)
+            print("\nSearches have been re-indexed.")
 
         ## Export Database
         elif ans == "Export Database":
