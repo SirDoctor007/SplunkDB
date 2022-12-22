@@ -204,6 +204,7 @@ class Menu:
             tags = self.database.get_tags()
             clear()
             print(pyfiglet.figlet_format("Select Tag"))
+            tags.sort()
             tag = get_answer(tags)
 
             results = self.database.search_tag(tag)
